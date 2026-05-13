@@ -1,11 +1,6 @@
 import { MongoClient, type Db, type Collection } from "mongodb";
 import type { Poll, Vote } from "@/types/poll";
 
-const uri = process.env.MONGODB_URI;
-if (!uri) {
-  throw new Error("MONGODB_URI is not defined in .env.local");
-}
-
 const DB_NAME = "sondage";
 
 declare global {
@@ -13,11 +8,20 @@ declare global {
   var _mongoIndexesReady: Promise<void> | undefined;
 }
 
-const clientPromise: Promise<MongoClient> =
-  globalThis._mongoClientPromise ?? new MongoClient(uri).connect();
+function getClientPromise(): Promise<MongoClient> {
+  if (globalThis._mongoClientPromise) return globalThis._mongoClientPromise;
 
-if (process.env.NODE_ENV !== "production") {
-  globalThis._mongoClientPromise = clientPromise;
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    throw new Error(
+      "MONGODB_URI manquante. Définissez-la dans .env.local (dev) ou dans les variables d'environnement Vercel (prod).",
+    );
+  }
+  const promise = new MongoClient(uri).connect();
+  if (process.env.NODE_ENV !== "production") {
+    globalThis._mongoClientPromise = promise;
+  }
+  return promise;
 }
 
 async function ensureIndexes(db: Db): Promise<void> {
@@ -28,7 +32,7 @@ async function ensureIndexes(db: Db): Promise<void> {
 }
 
 export async function getDb(): Promise<Db> {
-  const client = await clientPromise;
+  const client = await getClientPromise();
   const db = client.db(DB_NAME);
 
   if (!globalThis._mongoIndexesReady) {
